@@ -1,58 +1,27 @@
+from pathlib import Path
 import requests
 from flask import Flask, request
 from flask_admin import Admin
 from flask_admin.contrib.sqla import ModelView
+from models import db, Category
 import pymorphy2
 
+BASE_DIR = Path(__file__).resolve().parent
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'the random string'
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///project.db"
+app.config['SECRET_KEY'] = '123456789012345678901234567890123456789'
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///./database.db"
+app.config['TELEGRAM_TOKEN'] = '7565599070:AAEwOj102OQanJq8liXBK1qZCrkKjcKld6w'
+app.config["TELEGRAM_ADMIN_CHAT_ID"] = '1070122283'
+
 admin = Admin()
+#
+# TOKEN = '7565599070:AAEwOj102OQanJq8liXBK1qZCrkKjcKld6w'
 
-TOKEN = '7565599070:AAEwOj102OQanJq8liXBK1qZCrkKjcKld6w'
-
-ADMIN_CHAT_ID = '1070122283'
+# ADMIN_CHAT_ID = '1070122283'
 
 user_data = {}
 
-category1_path = r'\data\lichni_kabinet.txt'
-category2_path = r'\data\lichnie_dannie.txt'
-category3_path = r'\data\naim_zhilogo_pomeshenia.txt'
-category4_path = r'\data\nevernoe_otobrazhenie.txt'
-category5_path = r'\data\oplata_obychenia.txt'
-category6_path = r'\data\problemi_s_saitom.txt'
-category7_path = r'\data\spravki.txt'
-category8_path = r'\data\vibornie_disciplini.txt'
-category9_path = r'\data\ytochnenie_informacii.txt'
-category10_path = r'\data\zadolzhennosti.txt'
-
-
-def load_words_from_file(file_path):
-    return []
-    try:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            text = file.read()
-            words = text.split()
-        return words
-    except Exception as e:
-        print(f"Error reading file {file_path}: {e}")
-        return []
-
-
-keywords1 = load_words_from_file(category1_path)
-keywords2 = load_words_from_file(category2_path)
-keywords3 = load_words_from_file(category3_path)
-keywords4 = load_words_from_file(category4_path)
-keywords5 = load_words_from_file(category5_path)
-keywords6 = load_words_from_file(category6_path)
-keywords7 = load_words_from_file(category7_path)
-keywords8 = load_words_from_file(category8_path)
-keywords9 = load_words_from_file(category9_path)
-keywords10 = load_words_from_file(category10_path)
-
-keywords_list = [keywords1, keywords2, keywords3, keywords4, keywords5, 
-                 keywords6, keywords7, keywords8, keywords9, keywords10]
 
 def normalize_text(text):
     morph = pymorphy2.MorphAnalyzer()
@@ -65,36 +34,24 @@ def normalize_text(text):
 
     return ' '.join(normalized_words)
 
-def category_identificator(data, keywords_list):
-    print(keywords_list)
-    message = normalize_text(data)
-    maxcount = 0
-    flag = 0
-    category = ''
-    
-    for index, keywords in keywords_list.items():
-        count = sum(1 for keyword in keywords if keyword in message)
-        if count > maxcount:
-            maxcount = count
-            flag = index
 
-    category_map = {
-        1: 'личный кабинет',
-        2: 'личные данные',
-        3: 'найм жилого помещения',
-        4: 'неверное отображение',
-        5: 'оплата обучения',
-        6: 'проблемы с сайтом',
-        7: 'справки',
-        8: 'выборные дисциплины',
-        9: 'уточнение информации',
-        10: 'задолженности'
-    }
+def categorize_message(data, keywords_list):
+    normalized_message = normalize_text(data)
+    max_keyword_count = 0
+    category_id = None
+    best_category_id = None
 
-    return flag
+    for category_id, keywords in keywords_list.items():
+        keyword_count = sum(1 for keyword in keywords if keyword in normalized_message)
+        if keyword_count > max_keyword_count:
+            max_keyword_count = keyword_count
+            best_category_id = category_id
+
+    return best_category_id
+
 
 def send_message(chat_id, text, disable_notification=True):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{app.config['TELEGRAM_TOKEN']}/sendMessage"
     data = {
         "chat_id": chat_id,
         "text": text,
@@ -106,32 +63,28 @@ def send_message(chat_id, text, disable_notification=True):
     except Exception as e:
         print(f"Error sending message: {e}")
         return {}
+    
 
 @app.route("/new_report", methods=["POST"])
-def new_report():
-    from models import db, Category
-    from collections import defaultdict
+def handle_new_report():
     data = request.get_json()
-    with app.app_context():
-        # categories = db.session.Query(Category).all()
-        categories = db.session.execute(db.select(Category)).all()
-    keywords = defaultdict(list)
-    for cat in categories[0]:
-        print(cat)
-        keywords[cat.name].extend(cat.keywords.split(';'))
-    flag =  category_identificator(data["text"], keywords)
-    print(flag)
-    # with app.app_context():
-        # category = db.session.execute(db.select(Category).filter_by(name=flag)).all()[0]
-    category = categories[flag]
-    print(category)
+    categories = Category.query.all()
+    keywords = {category.name: [s.strip() for s in category.keywords.split(';')] for category in categories}
+    category_name = categorize_message(data["text"], keywords)
+    if category_name is None:
+        send_message(app.config["TELEGRAM_ADMIN_CHAT_ID"], data["text"])
+        return {"status": "warring", "message": "Категория не определена"}
+    category = Category.query.filter_by(name=category_name).first()
+    if category is None:
+        return {"status": "error", "message": "Категория не найдена"}
     if category.default_answer is not None:
-        return {"status": "default_answer", "answer": default_answer}
-    chat_id = ADMIN_CHAT_ID if category.chat_id is None else category.chat_id
-    msg = f"""Сообщение пользователя: {data["text"]}
+        return {"status": "default_answer", "answer": category.default_answer}
+    chat_id = category.chat_id or app.config["TELEGRAM_ADMIN_CHAT_ID"]
+    message = f"""Сообщение пользователя: {data["text"]}
 Форма обратной связи: {data["callback"]}"""
-    send_message(chat_id, msg)
-    return {"status": "ok"}
+    send_message(chat_id, message)
+    return {"status": "send_to_telegram"}
+
 
 def create_app():
     from models import db, Category
@@ -142,7 +95,7 @@ def create_app():
     admin.add_view(ModelView(Category, db.session))
     return app
 
+app = create_app()
+
 if __name__ == "__main__":
-    create_app().run(debug=True, port=5000)
-
-
+    app.run(debug=True, port=5000)
