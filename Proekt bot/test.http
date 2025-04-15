@@ -1,0 +1,7 @@
+POST http://localhost:5000/new_report HTTP/1.1
+Content-Type: application/json
+Accept: application/json 
+
+{"text":"что будет если преподователь не придёт и не поставит оценуу по зачёту блять заеблася уже писать эту поебень короче, беда следующая тут я решил проверить может ли он из предложения выцепить строки и понять о чем речь пкдпцпдцпд",
+"callback":"http://itport.ugrasu.ru/reportcallback?id=123"}
+
