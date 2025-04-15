@@ -1,7 +1,0 @@
-POST http://localhost:5000/new_report HTTP/1.1
-Content-Type: application/json
-Accept: application/json 
-
-{"text":"У меня не работает личный кабинет",
-"callback":"http://itport.ugrasu.ru/reportcallback?id=123"}
-
