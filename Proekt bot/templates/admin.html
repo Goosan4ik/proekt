@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Админ-панель</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .question { background: #f5f5f5; padding: 10px; margin-bottom: 10px; }
+        textarea { width: 100%; height: 100px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>Вопросы от пользователей</h1>
+    <div id="questions"></div>
+
+    <div id="reply-form" style="display: none;">
+        <h3>Ответить пользователю</h3>
+        <textarea id="reply-text" placeholder="Введите ответ..."></textarea>
+        <button onclick="sendReply()">Отправить</button>
+        <input type="hidden" id="current-chat-id">
+    </div>
+
+    <script>
+        // Загрузка новых вопросов
+        function loadQuestions() {
+            fetch("/get_questions") 
+                .then(res => res.json())
+                .then(data => {
+                    let html = "";
+                    data.forEach(q => {
+                        html += `
+                            <div class="question">
+                                <strong>${q.user}</strong> (ID: ${q.chat_id}):<br>
+                                ${q.text}
+                                <button onclick="showReplyForm(${q.chat_id})">Ответить</button>
+                            </div>
+                        `;
+                    });
+                    document.getElementById("questions").innerHTML = html;
+                });
+        }
+
+        // Отправка ответа
+        function sendReply() {
+            const chatId = document.getElementById("current-chat-id").value;
+            const text = document.getElementById("reply-text").value;
+
+            fetch("/send_reply", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ chat_id: chatId, message: text })
+            }).then(() => {
+                alert("Ответ отправлен!");
+                document.getElementById("reply-text").value = "";
+            });
+        }
+
+        // Показ формы ответа
+        function showReplyForm(chatId) {
+            document.getElementById("current-chat-id").value = chatId;
+            document.getElementById("reply-form").style.display = "block";
+        }
+
+        // Обновление вопросов каждые 10 сек
+        setInterval(loadQuestions, 10000);
+        loadQuestions();
+    </script>
+</body>
+</html>
